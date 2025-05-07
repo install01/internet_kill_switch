@@ -6,7 +6,7 @@ from tkinter import messagebox, simpledialog
 from flask import Flask, request
 
 # 부모 암호 (원하시면 변경하세요)
-PARENT_PASSWORD = "8801046340806"
+PARENT_PASSWORD = "PASSWD"
 
 # Flask 앱 초기화
 flask_app = Flask(__name__)
