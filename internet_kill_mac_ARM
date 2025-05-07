@@ -1,0 +1,76 @@
+import os
+import subprocess
+import threading
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+from flask import Flask, request
+
+# 비밀번호 설정
+PARENT_PASSWORD = "8801046340806"
+
+# Flask 앱 구성
+flask_app = Flask(__name__)
+
+def auth():
+    password = simpledialog.askstring("비밀번호 확인", "부모 암호를 입력하세요:", show='*')
+    return password == PARENT_PASSWORD
+
+def get_all_services():
+    try:
+        output = subprocess.check_output(['networksetup', '-listallnetworkservices'], text=True)
+        services = output.strip().split('\n')[1:]  # 첫 줄 무시
+        return [s.strip('* ') for s in services]
+    except subprocess.CalledProcessError:
+        return []
+
+def set_network_services(enable: bool):
+    action = 'on' if enable else 'off'
+    services = get_all_services()
+    for service in services:
+        os.system(f"networksetup -setnetworkserviceenabled '{service}' {action}")
+
+def disable_network():
+    if auth():
+        set_network_services(False)
+        messagebox.showinfo("인터넷 차단됨", "모든 네트워크가 차단되었습니다.")
+    else:
+        messagebox.showerror("실패", "잘못된 암호입니다.")
+
+def enable_network():
+    if auth():
+        set_network_services(True)
+        messagebox.showinfo("인터넷 복원됨", "모든 네트워크가 복원되었습니다.")
+    else:
+        messagebox.showerror("실패", "잘못된 암호입니다.")
+
+# Flask 원격 API 핸들러
+@flask_app.route('/disable', methods=['POST'])
+def remote_disable():
+    if request.args.get('key') != PARENT_PASSWORD:
+        return "Unauthorized", 403
+    set_network_services(False)
+    return "인터넷 차단 완료"
+
+@flask_app.route('/enable', methods=['POST'])
+def remote_enable():
+    if request.args.get('key') != PARENT_PASSWORD:
+        return "Unauthorized", 403
+    set_network_services(True)
+    return "인터넷 복원 완료"
+
+# Flask 서버 스레드 시작
+def start_flask_server():
+    flask_app.run(host='0.0.0.0', port=8999)
+
+threading.Thread(target=start_flask_server, daemon=True).start()
+
+# Tkinter GUI 구성
+root = tk.Tk()
+root.title("인터넷 제어 (자녀용)")
+root.geometry("350x180")
+
+tk.Label(root, text="인터넷 차단/복원").pack(pady=10)
+tk.Button(root, text="🔒 인터넷 차단 (Wi-Fi + 유선)", command=disable_network).pack(pady=5)
+tk.Button(root, text="🔓 인터넷 복원", command=enable_network).pack(pady=5)
+
+root.mainloop()
