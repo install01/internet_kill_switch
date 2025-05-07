@@ -84,5 +84,3 @@ nano internet_blocker.py
 To save changes, press `Ctrl+O` followed by `Enter`. To exit, press `Ctrl+X`.
 
 ---
-
-## 📄 License
