@@ -1,0 +1,93 @@
+# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+import os, subprocess, threading, sys
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+from flask import Flask, request
+
+# 부모 암호 (원하시면 변경하세요)
+PARENT_PASSWORD = "8801046340806"
+
+# Flask 앱 초기화
+flask_app = Flask(__name__)
+
+def auth():
+    """Tkinter 다이얼로그로 비밀번호 확인"""
+    pwd = simpledialog.askstring("비밀번호 확인", "부모 암호를 입력하세요:", show='*')
+    return pwd == PARENT_PASSWORD
+
+def get_all_adapters():
+    """netsh로 시스템에 등록된 모든 네트워크 인터페이스 이름 가져오기"""
+    try:
+        output = subprocess.check_output(
+            'netsh interface show interface', shell=True, text=True
+        )
+        lines = output.splitlines()[3:]  # 헤더 3줄 건너뛰기
+        adapters = []
+        for line in lines:
+            if not line.strip():
+                continue
+            parts = line.split()
+            # 네 번째 칸부터가 인터페이스 이름
+            name = ' '.join(parts[3:])
+            adapters.append(name)
+        return adapters
+    except Exception:
+        return []
+
+def set_network_services(enable: bool):
+    """모든 인터페이스를 활성화(enable) 또는 비활성화(disable)"""
+    action = 'enable' if enable else 'disable'
+    for name in get_all_adapters():
+        # 관리자 권한으로 실행해야 함!
+        subprocess.run(
+            f'netsh interface set interface "{name}" {action}',
+            shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+
+def disable_network():
+    if auth():
+        set_network_services(False)
+        messagebox.showinfo("인터넷 차단됨", "모든 네트워크가 차단되었습니다.")
+    else:
+        messagebox.showerror("실패", "잘못된 암호입니다.")
+
+def enable_network():
+    if auth():
+        set_network_services(True)
+        messagebox.showinfo("인터넷 복원됨", "모든 네트워크가 복원되었습니다.")
+    else:
+        messagebox.showerror("실패", "잘못된 암호입니다.")
+
+# ─── Flask 원격 API 엔드포인트 ──────────────────────────────────────────────
+@flask_app.route('/disable', methods=['POST'])
+def remote_disable():
+    if request.args.get('key') != PARENT_PASSWORD:
+        return "Unauthorized", 403
+    set_network_services(False)
+    return "인터넷 차단 완료"
+
+@flask_app.route('/enable', methods=['POST'])
+def remote_enable():
+    if request.args.get('key') != PARENT_PASSWORD:
+        return "Unauthorized", 403
+    set_network_services(True)
+    return "인터넷 복원 완료"
+# ────────────────────────────────────────────────────────────────────────────
+
+def start_flask_server():
+    flask_app.run(host='0.0.0.0', port=8999)
+
+# Flask 서버를 백그라운드 스레드로 실행
+threading.Thread(target=start_flask_server, daemon=True).start()
+
+# ─── Tkinter GUI ───────────────────────────────────────────────────────────
+root = tk.Tk()
+root.title("인터넷 제어 (자녀용)")
+root.geometry("350x180")
+
+tk.Label(root, text="인터넷 차단/복원", font=('맑은 고딕', 12)).pack(pady=10)
+tk.Button(root, text="🔒 인터넷 차단 (모든 네트워크)", width=25, command=disable_network).pack(pady=5)
+tk.Button(root, text="🔓 인터넷 복원", width=25, command=enable_network).pack(pady=5)
+
+root.mainloop()
